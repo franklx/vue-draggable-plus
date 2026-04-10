@@ -1,4 +1,4 @@
-import Sortable, { type Options, type SortableEvent } from 'sortablejs'
+import Sortable, { MultiDrag, Swap, type Options, type SortableEvent } from 'sortablejs'
 import {
   getCurrentInstance,
   isRef,
@@ -28,6 +28,9 @@ import {
   removeElement,
   removeNode
 } from './utils'
+
+// @ts-ignore -- Hack for preventing multiple plugin mounts.
+Sortable.__mounted ??= Sortable.mount(new MultiDrag(), new Swap()) || true
 
 function defaultClone<T>(element: T): T {
   if (element === undefined || element === null) return element
@@ -91,7 +94,7 @@ export interface UseDraggableReturn extends Pick<Sortable, SortableMethod> {
   resume: () => void
 }
 
-export interface UseDraggableOptions<T> extends Options {
+export interface UseDraggableOptions<T> extends Omit<Options, 'onStart' | 'onEnd' | 'onAdd' | 'onClone' | 'onChoose' | 'onUnchoose' | 'onUpdate' | 'onSort' | 'onRemove' | 'onFilter' | 'onChange' | 'onSelect' | 'onDeselect'> {
   clone?: (element: T) => T
   immediate?: boolean
   customUpdate?: (event: DraggableEvent<T>) => void
@@ -139,6 +142,14 @@ export interface UseDraggableOptions<T> extends Options {
    * Called when dragging element changes position
    */
   onChange?: ((evt: DraggableEvent<T>) => void) | undefined
+  /**
+   * Called when an element is selected
+   */
+  onSelect?: ((event: DraggableEvent<T>) => void) | undefined
+  /**
+   * Called when an element is deselected
+   */
+  onDeselect?: ((event: DraggableEvent<T>) => void) | undefined
 }
 
 /**
@@ -282,7 +293,7 @@ export function useDraggable<T>(...args: any[]): UseDraggableReturn {
       }
       //endregion
     } catch (e) {
-      error = e
+      error = e as Error
     } finally {
       currentNodes = null
     }

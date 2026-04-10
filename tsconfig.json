@@ -1,11 +1,10 @@
 {
   "compilerOptions": {
-    "baseUrl": "./",
+    "moduleResolution": "bundler",
     "outDir": "dist",
     "sourceMap": false,
-    "target": "ES2022",
-    "module": "ES2022",
-    "moduleResolution": "node",
+    "target": "esnext",
+    "module": "esnext",
     "allowJs": false,
     "noUnusedLocals": true,
     "strictNullChecks": true,
@@ -25,8 +24,8 @@
     "declarationDir": "dist",
     "rootDir": ".",
     "paths": {
-      "@/*": ["src/*"],
-      "vue-draggable-plus": ["src/index.ts"]
+      "@/*": ["./src/*"],
+      "vue-draggable-plus": ["./src/index.ts"]
     }
   },
   "include": ["src/**/*"],

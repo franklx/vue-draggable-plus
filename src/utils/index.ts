@@ -130,7 +130,7 @@ export function getElementBySelector(
  * @param {any} [ctx=null] - The context of the function.
  * @returns {Function}
  */
-export function mergeExecuted<T extends (...args: []) => any>(
+export function mergeExecuted<T extends (...args: any[]) => any>(
   fn: T,
   afterFn: T,
   ctx: any = null

@@ -28,6 +28,9 @@ module.exports = defineConfig({
       }
     }
   ],
+  ignores:[
+    'dist',
+  ],
   rules: {
     'no-debugger': ['error'],
     'node/no-unpublished-require': 0,
