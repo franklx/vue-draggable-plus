@@ -22,6 +22,7 @@ export default defineConfig({
   },
   build: {
     target: 'es2015',
+    sourcemap: false,
     lib: {
       entry: resolve(__dirname, './src/index.ts'),
       name: 'VueDraggablePlus',

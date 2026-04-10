@@ -78,8 +78,10 @@ const CLONE_ELEMENT_KEY = Symbol('cloneElement')
 
 export interface DraggableEvent<T = any> extends SortableEvent {
   item: HTMLElement & { [CLONE_ELEMENT_KEY]: any }
+  items: Array<HTMLElement & { [CLONE_ELEMENT_KEY]: any }>
   data: T
   clonedData: T
+  clones: Array<HTMLElement>
 }
 type SortableMethod = 'closest' | 'save' | 'toArray' | 'destroy' | 'option'
 
@@ -206,13 +208,22 @@ export function useDraggable<T>(...args: any[]): UseDraggableReturn {
    * @param {DraggableEvent} evt - DraggableEvent
    */
   function onStart(evt: DraggableEvent) {
-    const { from, oldIndex, item } = evt
-    const nodes = Array.from(from.childNodes);
-    currentNodes = forceFallback && !fallbackOnBody ? nodes.slice(0, -1) : nodes;
-    const data = unref(unref(list)?.[oldIndex!])
-    const clonedData = clone(data)
-    setCurrentData(data, clonedData)
-    item[CLONE_ELEMENT_KEY] = clonedData
+    const { from, oldIndex: _oldIndex, oldIndicies, item: _item, items } = evt
+    if (!items?.length) {
+      items.push(_item)
+      oldIndicies.push({ multiDragElement: _item, index: _oldIndex! })
+    }
+    currentNodes = []
+    for (const [idx, item] of items.entries()) {
+      const { index: oldIndex } = oldIndicies[idx]
+      const nodes = Array.from(from.childNodes);
+      currentNodes.push(...(forceFallback && !fallbackOnBody ? nodes.slice(0, -1) : nodes))
+      const data = unref(unref(list)?.[oldIndex!])
+      const clonedData = clone(data)
+      setCurrentData(data, clonedData)
+      item[CLONE_ELEMENT_KEY] = clonedData
+    }
+
   }
 
   /**
@@ -220,15 +231,21 @@ export function useDraggable<T>(...args: any[]): UseDraggableReturn {
    * @param {DraggableEvent} evt
    */
   function onAdd(evt: DraggableEvent) {
-    const element = evt.item[CLONE_ELEMENT_KEY]
-    if (isUndefined(element)) return
-    removeNode(evt.item)
-    if (isRef<any[]>(list)) {
-      const newList = [...unref(list)]
-      list.value = insertElement(newList, evt.newDraggableIndex!, element)
-      return
+    const { item: _item, items, newDraggableIndex } = evt
+    if (!items?.length) {
+      items.push(_item)
     }
-    insertElement(unref(list), evt.newDraggableIndex!, element)
+    for (const item of items) {
+      const element = item[CLONE_ELEMENT_KEY]
+      if (isUndefined(element)) break
+      removeNode(item)
+      if (isRef<any[]>(list)) {
+        const newList = [...unref(list)]
+        list.value = insertElement(newList, newDraggableIndex!, element)
+        break
+      }
+      insertElement(unref(list), newDraggableIndex!, element)
+    }
   }
 
   /**
@@ -236,18 +253,26 @@ export function useDraggable<T>(...args: any[]): UseDraggableReturn {
    * @param {DraggableEvent} evt
    */
   function onRemove(evt: DraggableEvent) {
-    const { from, item, oldIndex, oldDraggableIndex, pullMode, clone } = evt
-    insertNodeAt(from, item, oldIndex!)
-    if (pullMode === 'clone') {
-      removeNode(clone)
-      return
+    const { from, item: _item, items, oldIndex: _oldIndex, oldIndicies, oldDraggableIndex, pullMode, clone: _clone, clones } = evt
+    if (!items?.length) {
+      items.push(_item)
+      oldIndicies.push({ multiDragElement: _item, index: _oldIndex! })
+      clones.push(_clone)
     }
-    if (isRef<any[]>(list)) {
-      const newList = [...unref(list)]
-      list.value = removeElement(newList, oldDraggableIndex!)
-      return
+    for (const [idx, item] of items.entries()) {
+      const { index: oldIndex } = oldIndicies[idx]
+      insertNodeAt(from, item, oldIndex!)
+      if (pullMode === 'clone') {
+        removeNode(clone)
+        break
+      }
+      if (isRef<any[]>(list)) {
+        const newList = [...unref(list)]
+        list.value = removeElement(newList, oldDraggableIndex!)
+        break
+      }
+      removeElement(unref(list), oldDraggableIndex!)
     }
-    removeElement(unref(list), oldDraggableIndex!)
   }
 
   /**
@@ -259,48 +284,63 @@ export function useDraggable<T>(...args: any[]): UseDraggableReturn {
       customUpdate(evt)
       return
     }
-    const { from, item, oldIndex, oldDraggableIndex, newDraggableIndex } = evt
-    removeNode(item)
-    insertNodeAt(from, item, oldIndex!)
-    if (isRef<any[]>(list)) {
-      const newList = [...unref(list)]
-      list.value = moveArrayElement(
-        newList,
-        oldDraggableIndex!,
-        newDraggableIndex!
-      )
-      return
+    const { from, item: _item, items, oldIndex: _oldIndex, oldIndicies, oldDraggableIndex, newDraggableIndex } = evt
+    if (!items?.length) {
+      items.push(_item)
+      oldIndicies.push({ multiDragElement: _item, index: _oldIndex! })
     }
-    moveArrayElement(unref(list), oldDraggableIndex!, newDraggableIndex!)
+    for (const [idx, item] of items.entries()) {
+      const { index: oldIndex } = oldIndicies[idx]
+      removeNode(item)
+      insertNodeAt(from, item, oldIndex!)
+      if (isRef<any[]>(list)) {
+        const newList = [...unref(list)]
+        list.value = moveArrayElement(
+          newList,
+          oldDraggableIndex!,
+          newDraggableIndex!
+        )
+        break
+      }
+      moveArrayElement(unref(list), oldDraggableIndex!, newDraggableIndex!)
+    }
   }
 
-  function onEnd(e: DraggableEvent) {
-    const { newIndex, oldIndex, from, to } = e
-    let error: Error | null = null
-    const isSameIndex = newIndex === oldIndex && from === to
-    try {
-      //region #202
-      if (isSameIndex) {
-        let oldNode: Node | null = null
-        currentNodes?.some((node, index) => {
-          if (oldNode && currentNodes?.length !== to.childNodes.length) {
-            from.insertBefore(oldNode, node.nextSibling)
-            return true
-          }
-          const _node = to.childNodes[index]
-          oldNode = to?.replaceChild(node, _node)
-        })
-      }
-      //endregion
-    } catch (e) {
-      error = e as Error
-    } finally {
-      currentNodes = null
+  function onEnd(evt: DraggableEvent) {
+    const { newIndex: _newIndex, newIndicies, oldIndex: _oldIndex, oldIndicies, from, to, item: _item } = evt
+    if (newIndicies?.length || oldIndicies?.length) {
+      oldIndicies.push({ multiDragElement: _item, index: _oldIndex! })
+      newIndicies.push({ multiDragElement: _item, index: _newIndex! })
     }
-    nextTick(() => {
-      setCurrentData()
-      if (error) throw error
-    })
+    let error: Error | null = null
+
+    for (const [idx, { index: newIndex }] of newIndicies.entries()) {
+      const { index: oldIndex } = oldIndicies[idx]
+      const isSameIndex = newIndex === oldIndex && from === to
+      try {
+        //region #202
+        if (isSameIndex) {
+          let oldNode: Node | null = null
+          currentNodes?.some((node, index) => {
+            if (oldNode && currentNodes?.length !== to.childNodes.length) {
+              from.insertBefore(oldNode, node.nextSibling)
+              return true
+            }
+            const _node = to.childNodes[index]
+            oldNode = to?.replaceChild(node, _node)
+          })
+        }
+        //endregion
+      } catch (e) {
+        error = e as Error
+      } finally {
+        currentNodes = null
+      }
+      nextTick(() => {
+        setCurrentData()
+        if (error) throw error
+      })
+    }
   }
 
   /**
